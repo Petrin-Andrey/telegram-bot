@@ -1,241 +1,202 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+Telegram Bot с интеграцией OpenAI API
+Автор: Ваше Имя
+GitHub: ссылка на репозиторий
+"""
+
 import telebot
 import requests
-import json
-import random
-from datetime import datetime, timedelta
+import logging
+import sys
+from typing import Optional
 
-TELEGRAM_TOKEN = "8627616199:AAGPsQ0XvQQFT0CpdWFoLNVnOcWJ254h_jA"
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+# Пытаемся импортировать конфиг
+try:
+    import config
+except ImportError:
+    print("❌ Ошибка: файл config.py не найден!")
+    print("Скопируйте config.example.py в config.py и добавьте свои токены")
+    sys.exit(1)
 
-# Счетчики запросов
-request_count = 0
-last_reset = datetime.now()
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-def reset_counter():
-    global request_count, last_reset
-    if datetime.now() - last_reset > timedelta(hours=24):
-        request_count = 0
-        last_reset = datetime.now()
 
-# ===== НЕСКОЛЬКО БЕСПЛАТНЫХ AI ИСТОЧНИКОВ =====
-def free_ai_1(prompt):
-    """ChatGPT через бесплатный прокси"""
-    try:
-        url = "https://api.gpchat.xyz/v1/chat/completions"
-        data = {
-            "model": "gpt-3.5-turbo",
-            "messages": [{"role": "user", "content": prompt}],
+class OpenAIBot:
+    """Класс для работы с Telegram ботом и OpenAI API"""
+    
+    def __init__(self):
+        """Инициализация бота"""
+        self.bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
+        self._register_handlers()
+        logger.info("Бот успешно инициализирован")
+    
+    def _register_handlers(self):
+        """Регистрация обработчиков команд"""
+        self.bot.message_handler(commands=['start'])(self.send_welcome)
+        self.bot.message_handler(commands=['help'])(self.send_help)
+        self.bot.message_handler(commands=['reset'])(self.reset_chat)
+        self.bot.message_handler(func=lambda message: True)(self.handle_message)
+    
+    def ask_openai(self, question: str) -> Optional[str]:
+        """
+        Отправка запроса к OpenAI API
+        
+        Args:
+            question: Текст вопроса пользователя
+            
+        Returns:
+            Ответ от API или сообщение об ошибке
+        """
+        headers = {
+            "Authorization": f"Bearer {config.OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": config.MODEL,
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "Ты полезный ассистент. Отвечай на русском языке, подробно и по делу."
+                },
+                {"role": "user", "content": question}
+            ],
+            "temperature": 0.7,
             "max_tokens": 1000
         }
-        response = requests.post(url, json=data, timeout=20)
-        return response.json()['choices'][0]['message']['content']
-    except:
-        return None
-
-def free_ai_2(prompt):
-    """Бесплатный нейросетевой API"""
-    try:
-        url = "https://api.popcat.xyz/chat"
-        params = {"msg": prompt}
-        response = requests.get(url, params=params, timeout=20)
-        return response.text
-    except:
-        return None
-
-def free_ai_3(prompt):
-    """Еще один бесплатный API"""
-    try:
-        url = "https://api.owkinz.xyz/api/gpt4"
-        params = {"ask": prompt}
-        response = requests.get(url, params=params, timeout=20)
-        return response.json().get('response')
-    except:
-        return None
-
-def free_ai_4(prompt):
-    """GPT-4 через бесплатный прокси"""
-    try:
-        url = "https://api.vanwi.xyz/api/gpt"
-        params = {"q": prompt}
-        response = requests.get(url, params=params, timeout=20)
-        return response.text
-    except:
-        return None
-
-def free_ai_5(prompt):
-    """Еще один источник"""
-    try:
-        url = "https://api.siputzx.my.id/api/ai/gpt4"
-        params = {"text": prompt}
-        response = requests.get(url, params=params, timeout=20)
-        return response.json().get('data')
-    except:
-        return None
-
-def get_ai_response(prompt):
-    """Автоматическое переключение между источниками"""
-    reset_counter()
-    
-    sources = [
-        free_ai_1, free_ai_2, free_ai_3, free_ai_4, free_ai_5
-    ]
-    
-    for source in sources:
+        
         try:
-            result = source(prompt)
-            if result and len(result) > 10:
-                return result
-        except:
-            continue
+            response = requests.post(
+                config.OPENAI_API_URL,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                answer = result["choices"][0]["message"]["content"]
+                logger.info(f"Успешный ответ от API (длина: {len(answer)} символов)")
+                return answer
+            else:
+                error_msg = f"API Error {response.status_code}: {response.text}"
+                logger.error(error_msg)
+                return f"❌ Ошибка API: {response.status_code}\nПроверьте API ключ и баланс"
+                
+        except requests.exceptions.Timeout:
+            logger.error("Timeout при запросе к API")
+            return "❌ Превышено время ожидания ответа от сервера"
+        except requests.exceptions.ConnectionError:
+            logger.error("Connection error при запросе к API")
+            return "❌ Не удалось подключиться к API. Проверьте интернет"
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            return f"❌ Неожиданная ошибка: {str(e)}"
     
-    return "⚠️ Все сервисы временно недоступны. Попробуйте через минуту."
+    def send_welcome(self, message):
+        """Обработчик команды /start"""
+        welcome_text = """
+🤖 **Привет! Я бот с искусственным интеллектом**
 
-# ===== КНОПКИ МЕНЮ =====
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+Я использую нейросеть OpenAI, чтобы отвечать на ваши вопросы.
 
-def main_menu():
-    keyboard = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    buttons = [
-        KeyboardButton("ℹ️ Помощь"),
-        KeyboardButton("🔄 Новый диалог"),
-        KeyboardButton("⭐ О боте"),
-        KeyboardButton("💵 Курс валют"),
-        KeyboardButton("📰 Новости"),
-        KeyboardButton("🌤 Погода"),
-        KeyboardButton("📖 Wikipedia")
-    ]
-    keyboard.add(*buttons)
-    return keyboard
+**Что я умею:**
+• Отвечать на любые вопросы
+• Помогать с кодом
+• Объяснять сложные темы
+• Переводить текст
 
-# ===== ФУНКЦИИ-ЗАГЛУШКИ (для кнопок) =====
-def get_exchange_rates():
-    try:
-        url = "https://api.exchangerate-api.com/v4/latest/USD"
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        usd_byn = data['rates'].get('BYN', 'нет данных')
-        eur_byn = data['rates'].get('BYN', 'нет данных') * (data['rates'].get('EUR', 1) / data['rates'].get('USD', 1))
-        return f"💵 USD → BYN: {usd_byn:.2f} Br\n💶 EUR → BYN: {eur_byn:.2f} Br"
-    except:
-        return "❌ Ошибка получения курсов"
+**Команды:**
+/start - Показать это сообщение
+/help - Подробная справка
+/reset - Очистить диалог
 
-def get_weather(city):
-    try:
-        url = f"https://wttr.in/{city}?format=%C+%t+%w&lang=ru"
-        response = requests.get(url, timeout=10)
-        return f"🌤 {city}: {response.text.strip()}"
-    except:
-        return "❌ Ошибка погоды"
-
-def search_wikipedia(query):
-    try:
-        url = f"https://ru.wikipedia.org/api/rest_v1/page/summary/{query}"
-        response = requests.get(url, timeout=10)
-        data = response.json()
-        return f"📖 {data.get('title')}\n\n{data.get('extract', 'Не найдено')[:500]}"
-    except:
-        return "❌ Не найдено"
-
-def get_news():
-    return "📰 Новости:\n• РИА Новости\n• ТАСС\n• Ведомости"
-
-# ===== ОБРАБОТЧИКИ КОМАНД =====
-@bot.message_handler(commands=['start', 'help'])
-def start(message):
-    text = """
-🤖 **Бот с безлимитным AI!**
-
-📌 **Никаких лимитов!**
-📌 **Без VPN и регистрации!**
-
-📷 Отправь фото - распознаю текст
-💬 Напиши вопрос - отвечу
-
-📌 **Кнопки внизу всегда работают!**
-    """
-    bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=main_menu())
-
-@bot.message_handler(commands=['weather'])
-def weather_cmd(message):
-    city = message.text.replace('/weather', '').strip()
-    if not city:
-        bot.reply_to(message, "Пример: /weather Минск")
-        return
-    bot.reply_to(message, get_weather(city))
-
-@bot.message_handler(commands=['currency'])
-def currency_cmd(message):
-    bot.reply_to(message, get_exchange_rates())
-
-@bot.message_handler(commands=['news'])
-def news_cmd(message):
-    bot.reply_to(message, get_news())
-
-@bot.message_handler(commands=['wiki'])
-def wiki_cmd(message):
-    query = message.text.replace('/wiki', '').strip()
-    if not query:
-        bot.reply_to(message, "Пример: /wiki Минск")
-        return
-    bot.reply_to(message, search_wikipedia(query))
-
-# ===== ОБРАБОТЧИКИ КНОПОК =====
-@bot.message_handler(func=lambda m: m.text == "ℹ️ Помощь")
-def help_btn(m):
-    start(m)
-
-@bot.message_handler(func=lambda m: m.text == "🔄 Новый диалог")
-def new_btn(m):
-    bot.send_message(m.chat.id, "✅ Новый диалог начат!")
-
-@bot.message_handler(func=lambda m: m.text == "⭐ О боте")
-def about_btn(m):
-    bot.send_message(m.chat.id, "🤖 Бот на безлимитном AI\n⭐ Версия 3.0\n💬 Без лимитов и VPN")
-
-@bot.message_handler(func=lambda m: m.text == "💵 Курс валют")
-def currency_btn(m):
-    currency_cmd(m)
-
-@bot.message_handler(func=lambda m: m.text == "📰 Новости")
-def news_btn(m):
-    news_cmd(m)
-
-@bot.message_handler(func=lambda m: m.text == "🌤 Погода")
-def weather_btn(m):
-    bot.send_message(m.chat.id, "🌤 Напиши: /weather Минск")
-
-@bot.message_handler(func=lambda m: m.text == "📖 Wikipedia")
-def wiki_btn(m):
-    bot.send_message(m.chat.id, "📖 Напиши: /wiki Минск")
-
-# ===== ОСНОВНОЙ AI ОБРАБОТЧИК =====
-@bot.message_handler(func=lambda message: True)
-def chat(message):
-    global request_count
-    reset_counter()
+Просто напишите мне любой вопрос!
+"""
+        self.bot.reply_to(message, welcome_text, parse_mode='Markdown')
     
-    # Пропускаем текст кнопок
-    if message.text in ["ℹ️ Помощь", "🔄 Новый диалог", "⭐ О боте", 
-                        "💵 Курс валют", "📰 Новости", "🌤 Погода", "📖 Wikipedia"]:
-        return
-    
-    bot.send_chat_action(message.chat.id, 'typing')
-    
-    request_count += 1
-    remaining = 100 - request_count
-    if remaining < 20:
-        bot.send_message(message.chat.id, f"📊 Осталось ~{remaining} запросов на сегодня")
-    
-    answer = get_ai_response(message.text)
-    bot.send_message(message.chat.id, answer, reply_markup=main_menu())
+    def send_help(self, message):
+        """Обработчик команды /help"""
+        help_text = """
+📚 **Справка по использованию**
 
-# ===== ЗАПУСК =====
-if __name__ == '__main__':
-    print("=" * 50)
-    print("🚀 БЕЗЛИМИТНЫЙ БОТ ЗАПУЩЕН!")
-    print("=" * 50)
-    print("✅ Нет ограничений!")
-    print("✅ Не нужен VPN!")
-    print("✅ Кнопки всегда работают!")
-    print("=" * 50)
-    bot.polling(none_stop=True)
+**Как задавать вопросы:**
+• Пишите на любом языке (лучше на русском)
+• Чем точнее вопрос, тем точнее ответ
+• Можно задавать уточняющие вопросы
+
+**Примеры вопросов:**
+• "Какой класс у Buick Invicta 2024 года?"
+• "Напиши код калькулятора на Python"
+• "Объясни теорему Пифагора"
+• "Переведи на английский: привет мир"
+
+**Ограничения:**
+• Максимальная длина ответа - 1000 токенов (~750 слов)
+• Если ответ слишком длинный, он разобьется на части
+
+**Техническая информация:**
+• Модель: {model}
+• API: OpenAI
+• Бот написан на Python
+
+По всем вопросам: @ваш_телеграм
+""".format(model=config.MODEL)
+        self.bot.reply_to(message, help_text, parse_mode='Markdown')
+    
+    def reset_chat(self, message):
+        """Обработчик команды /reset"""
+        self.bot.reply_to(message, "🔄 Контекст диалога очищен! Задавайте новый вопрос.")
+    
+    def handle_message(self, message):
+        """Обработка всех текстовых сообщений"""
+        user_question = message.text
+        
+        # Пропускаем команды
+        if user_question.startswith('/'):
+            return
+        
+        # Индикатор печати
+        self.bot.send_chat_action(message.chat.id, 'typing')
+        
+        # Получаем ответ
+        answer = self.ask_openai(user_question)
+        
+        # Отправляем ответ (с разбивкой если нужно)
+        if answer and len(answer) > 4096:
+            for i in range(0, len(answer), 4096):
+                self.bot.reply_to(message, answer[i:i+4096])
+        else:
+            self.bot.reply_to(message, answer)
+    
+    def run(self):
+        """Запуск бота"""
+        logger.info("Запуск бота...")
+        print(f"\n{'='*50}")
+        print(f"🤖 Бот запущен!")
+        print(f"📱 Telegram: @{self.bot.get_me().username}")
+        print(f"🧠 Модель: {config.MODEL}")
+        print(f"🔗 API URL: {config.OPENAI_API_URL}")
+        print(f"{'='*50}\n")
+        
+        try:
+            self.bot.infinity_polling(timeout=60)
+        except KeyboardInterrupt:
+            print("\n👋 Бот остановлен пользователем")
+            logger.info("Бот остановлен")
+        except Exception as e:
+            logger.error(f"Критическая ошибка: {e}")
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    bot = OpenAIBot()
+    bot.run()
