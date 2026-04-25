@@ -15,7 +15,7 @@ OPENAI_API_KEY = "sk-proj-UngOYGhlxp_jjENk5ELtNLqowEiuQh9TK25o9oh3DgSw0IZv3h-4Y3
 MODEL = "https://api-inference.huggingface.co/models/IlyaGusev/saiga_mistral_7b_gguf"  # или "gpt-4"
 
 # URL API OpenAI (ПРАВИЛЬНЫЙ эндпоинт)
-OPENAI_API_URL = "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"
+HF_API_TOKEN = "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"
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
