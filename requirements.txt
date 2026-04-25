@@ -1,2 +1,4 @@
-pyTelegramBotAPI==4.15.0
+pytelegrambotapi==4.13.0
+google-generativeai==0.3.2
 requests==2.31.0
+Pillow==10.1.0
