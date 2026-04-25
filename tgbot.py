@@ -25,7 +25,6 @@ user_settings = {}
 # ===== ФУНКЦИЯ ПОГОДЫ =====
 def get_weather(city):
     try:
-        # Бесплатный API погоды (без ключа)
         url = f"https://wttr.in/{city}?format=%C+%t+%w&lang=ru"
         response = requests.get(url, timeout=10)
         
@@ -37,20 +36,23 @@ def get_weather(city):
     except Exception as e:
         return f"❌ Ошибка погоды: {e}"
 
-# ===== ФУНКЦИЯ КУРСОВ ВАЛЮТ =====
+# ===== ФУНКЦИЯ КУРСОВ ВАЛЮТ (BYN) =====
 def get_exchange_rates():
     try:
-        # Бесплатный API курсов валют
         url = "https://api.exchangerate-api.com/v4/latest/USD"
         response = requests.get(url, timeout=10)
         data = response.json()
         
+        usd_byn = data['rates'].get('BYN', 'Нет данных')
+        eur_byn = data['rates'].get('BYN', 'Нет данных') * (data['rates'].get('EUR', 1) / data['rates'].get('USD', 1))
         usd_rub = data['rates'].get('RUB', 'Нет данных')
-        eur_rub = data['rates'].get('RUB', 'Нет данных') * (data['rates'].get('EUR', 1) / data['rates'].get('USD', 1))
         
         text = f"""
-💵 **Курсы валют (USD → RUB):** {usd_rub:.2f} ₽
-💶 **Курсы валют (EUR → RUB):** {eur_rub:.2f} ₽
+💵 **Курсы валют (USD → BYN):** {usd_byn:.2f} Br
+💶 **Курсы валют (EUR → BYN):** {eur_byn:.2f} Br
+
+📋 **Для справки:**
+💵 USD → RUB: {usd_rub:.2f} ₽
 
 📅 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}
         """
@@ -61,12 +63,6 @@ def get_exchange_rates():
 # ===== ФУНКЦИЯ НОВОСТЕЙ =====
 def get_news():
     try:
-        # Бесплатное API новостей (GNews)
-        url = "https://gnews.io/api/v4/top-headlines?country=ru&token=ВАШ_КЛЮЧ_НОВОСТЕЙ"
-        # Временно используем альтернативный источник
-        url = "https://api.currentsapi.services/v1/latest-news?country=ru&apiKey=ВАШ_КЛЮЧ"
-        
-        # Для демонстрации - заглушка с реальными новостями через RSS
         news_sites = [
             {"name": "РИА Новости", "url": "https://ria.ru/lenta/"},
             {"name": "ТАСС", "url": "https://tass.ru/"},
@@ -84,7 +80,6 @@ def get_news():
 
 def search_news(topic):
     try:
-        # Ищем новости через Gemini
         prompt = f"Дай 3 свежих новости на тему '{topic}'. Напиши кратко, с источниками."
         response = model.generate_content(prompt)
         return f"📰 **Новости по теме '{topic}':**\n\n{response.text}"
@@ -108,7 +103,6 @@ def search_wikipedia(query):
                 text += f"\n\n🔗 [Читать полностью]({page_url})"
             return text
         else:
-            # Поиск через Gemini если не найдено в Wikipedia
             prompt = f"Расскажи кратко о '{query}' как в Wikipedia"
             response = model.generate_content(prompt)
             return f"📖 **{query}**\n\n{response.text[:500]}..."
@@ -168,15 +162,16 @@ def start(message):
    - Отправь любое фото с текстом
 
 🌤 **Погода:** /weather [город]
-   Пример: /weather Москва
+   Пример: /weather Минск
 
 💵 **Курсы валют:** /currency
+   (USD/BYN, EUR/BYN)
 
 📰 **Новости:** /news или /news [тема]
    Пример: /news технологии
 
 📖 **Wikipedia:** /wiki [запрос]
-   Пример: /wiki Python
+   Пример: /wiki Минск
 
 🌐 **Сменить язык:** /language [ru/en]
    Пример: /language en
@@ -185,15 +180,45 @@ def start(message):
     """
     bot.send_message(user_id, help_text, parse_mode='Markdown')
 
+# ===== ОБРАБОТЧИК HELP (отдельно) =====
 @bot.message_handler(commands=['help'])
 def help_command(message):
-    start(message)
+    user_id = message.chat.id
+    
+    help_text = """
+🌟 **Доступные команды:** 🌟
+
+📷 **Распознавание текста**
+   • Отправь фото с текстом
+
+🌤 **Погода**
+   • /weather Минск - погода в городе
+
+💵 **Курсы валют**
+   • /currency - USD/BYN, EUR/BYN
+
+📰 **Новости**
+   • /news - главные новости
+   • /news технологии - новости по теме
+
+📖 **Wikipedia**
+   • /wiki Минск - информация из Википедии
+
+🌐 **Язык ответов**
+   • /language ru - русский
+   • /language en - английский
+
+💬 **Просто напиши вопрос** - отвечу!
+
+📌 Есть вопросы? Просто спроси!
+    """
+    bot.send_message(user_id, help_text, parse_mode='Markdown')
 
 @bot.message_handler(commands=['weather'])
 def weather_command(message):
     city = message.text.replace('/weather', '').strip()
     if not city:
-        bot.reply_to(message, "🌤 Укажи город!\nПример: `/weather Москва`", parse_mode='Markdown')
+        bot.reply_to(message, "🌤 Укажи город!\nПример: `/weather Минск`", parse_mode='Markdown')
         return
     
     bot.send_chat_action(message.chat.id, 'typing')
@@ -223,7 +248,7 @@ def news_command(message):
 def wiki_command(message):
     query = message.text.replace('/wiki', '').strip()
     if not query:
-        bot.reply_to(message, "📖 Укажи запрос!\nПример: `/wiki Токио`", parse_mode='Markdown')
+        bot.reply_to(message, "📖 Укажи запрос!\nПример: `/wiki Минск`", parse_mode='Markdown')
         return
     
     bot.send_chat_action(message.chat.id, 'typing')
@@ -266,15 +291,16 @@ def chat(message):
 # ===== ЗАПУСК =====
 if __name__ == '__main__':
     print("=" * 50)
-    print("🚀 БОТ С НОВЫМИ ФУНКЦИЯМИ ЗАПУЩЕН!")
+    print("🚀 БОТ ЗАПУЩЕН!")
     print("=" * 50)
     print("✅ Доступные команды:")
-    print("   /weather [город]  - Погода")
-    print("   /currency          - Курсы валют")
-    print("   /news [тема]       - Новости")
-    print("   /wiki [запрос]     - Wikipedia")
-    print("   /language [ru/en]  - Сменить язык")
-    print("   /start или /help   - Помощь")
-    print("   📷 Отправь фото    - Распознавание текста")
+    print("   /start              - Главное меню")
+    print("   /help               - Помощь")
+    print("   /weather [город]    - Погода")
+    print("   /currency           - Курсы валют")
+    print("   /news [тема]        - Новости")
+    print("   /wiki [запрос]      - Wikipedia")
+    print("   /language [ru/en]   - Сменить язык")
+    print("   📷 Отправь фото     - Распознавание текста")
     print("=" * 50)
     bot.polling(none_stop=True)
