@@ -12,7 +12,7 @@ TELEGRAM_TOKEN = "8627616199:AAGPsQ0XvQQFT0CpdWFoLNVnOcWJ254h_jA"
 OPENAI_API_KEY = "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"
 
 # Какую модель использовать
-MODEL = "ai-forever/ruGPT-3.5-13B"  # или "gpt-4"
+MODEL = "https://api-inference.huggingface.co/models/IlyaGusev/saiga_mistral_7b_gguf"  # или "gpt-4"
 
 # URL API OpenAI (ПРАВИЛЬНЫЙ эндпоинт)
 OPENAI_API_URL = "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"
