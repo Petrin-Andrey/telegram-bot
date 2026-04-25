@@ -7,6 +7,7 @@ import base64
 import mimetypes
 from datetime import datetime
 import random
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 TELEGRAM_TOKEN = "8627616199:AAGPsQ0XvQQFT0CpdWFoLNVnOcWJ254h_jA"
 GEMINI_API_KEY = "AIzaSyA9p8L5nA_P3il7tiAupDHkNez0WEDKXfs"
@@ -21,6 +22,18 @@ chats = {}
 
 # Хранилище настроек пользователей
 user_settings = {}
+
+# ===== ГЛАВНОЕ МЕНЮ С КНОПКАМИ =====
+def main_menu():
+    keyboard = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    buttons = [
+        KeyboardButton("/help"),
+        KeyboardButton("/currency"),
+        KeyboardButton("/news"),
+        KeyboardButton("/start")
+    ]
+    keyboard.add(*buttons)
+    return keyboard
 
 # ===== ФУНКЦИЯ ПОГОДЫ =====
 def get_weather(city):
@@ -156,7 +169,7 @@ def start(message):
     user_settings[user_id] = {'language': 'ru'}
     
     help_text = """
-🌟 **Мои возможности:** 🌟
+🌟 **Добро пожаловать в Gemini Бот!** 🌟
 
 📷 **Распознавание текста с фото**
    - Отправь любое фото с текстом
@@ -165,22 +178,20 @@ def start(message):
    Пример: /weather Минск
 
 💵 **Курсы валют:** /currency
-   (USD/BYN, EUR/BYN)
 
 📰 **Новости:** /news или /news [тема]
-   Пример: /news технологии
 
 📖 **Wikipedia:** /wiki [запрос]
-   Пример: /wiki Минск
 
 🌐 **Сменить язык:** /language [ru/en]
-   Пример: /language en
 
 💬 **Просто напиши вопрос** - отвечу!
-    """
-    bot.send_message(user_id, help_text, parse_mode='Markdown')
 
-# ===== ОБРАБОТЧИК HELP (отдельно) =====
+📌 Используй кнопки внизу для быстрого доступа!
+    """
+    bot.send_message(user_id, help_text, parse_mode='Markdown', reply_markup=main_menu())
+
+# ===== ОБРАБОТЧИК HELP =====
 @bot.message_handler(commands=['help'])
 def help_command(message):
     user_id = message.chat.id
@@ -210,9 +221,9 @@ def help_command(message):
 
 💬 **Просто напиши вопрос** - отвечу!
 
-📌 Есть вопросы? Просто спроси!
+📌 Кнопки внизу отправляют команды автоматически!
     """
-    bot.send_message(user_id, help_text, parse_mode='Markdown')
+    bot.send_message(user_id, help_text, parse_mode='Markdown', reply_markup=main_menu())
 
 @bot.message_handler(commands=['weather'])
 def weather_command(message):
@@ -293,14 +304,10 @@ if __name__ == '__main__':
     print("=" * 50)
     print("🚀 БОТ ЗАПУЩЕН!")
     print("=" * 50)
-    print("✅ Доступные команды:")
-    print("   /start              - Главное меню")
-    print("   /help               - Помощь")
-    print("   /weather [город]    - Погода")
-    print("   /currency           - Курсы валют")
-    print("   /news [тема]        - Новости")
-    print("   /wiki [запрос]      - Wikipedia")
-    print("   /language [ru/en]   - Сменить язык")
-    print("   📷 Отправь фото     - Распознавание текста")
+    print("✅ Кнопки отправляют команды:")
+    print("   /help     - Помощь")
+    print("   /currency - Курсы валют")
+    print("   /news     - Новости")
+    print("   /start    - Главное меню")
     print("=" * 50)
     bot.polling(none_stop=True)
