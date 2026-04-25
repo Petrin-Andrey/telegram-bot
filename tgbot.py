@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-Telegram Bot с интеграцией OpenAI API
-Автор: Ваше Имя
-GitHub: ссылка на репозиторий
-"""
 
 import telebot
 import requests
