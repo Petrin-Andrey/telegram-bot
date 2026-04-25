@@ -1,194 +1,142 @@
-
 import telebot
 import requests
+import json
 import logging
-import sys
 from typing import Optional
 
-# Пытаемся импортировать конфиг
-try:
-    import config
-except ImportError:
-    print("❌ Ошибка: файл config.py не найден!")
-    print("Скопируйте config.example.py в config.py и добавьте свои токены")
-    sys.exit(1)
+# ========== НАСТРОЙКИ ==========
+# Токен вашего Telegram-бота (получить у @BotFather)
+TELEGRAM_TOKEN = "8627616199:AAGPsQ0XvQQFT0CpdWFoLNVnOcWJ254h_jA"
+
+# Ключ API OpenAI (получить на platform.openai.com)
+OPENAI_API_KEY = "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"
+
+# Какую модель использовать
+MODEL = "gpt-3.5-turbo"  # или "gpt-4"
+
+# URL API OpenAI (ПРАВИЛЬНЫЙ эндпоинт)
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ========== ИНИЦИАЛИЗАЦИЯ БОТА ==========
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-class OpenAIBot:
-    """Класс для работы с Telegram ботом и OpenAI API"""
+# ========== ФУНКЦИЯ ЗАПРОСА К OPENAI ==========
+def ask_openai(question: str) -> Optional[str]:
+    """
+    Отправляет запрос к OpenAI API и возвращает ответ.
+    Использует POST-запрос с JSON-телом (НЕ GET с параметром msg).
+    """
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
     
-    def __init__(self):
-        """Инициализация бота"""
-        self.bot = telebot.TeleBot(config.TELEGRAM_TOKEN)
-        self._register_handlers()
-        logger.info("Бот успешно инициализирован")
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {"role": "system", "content": "Ты полезный ассистент, отвечающий на русском языке."},
+            {"role": "user", "content": question}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 1000
+    }
     
-    def _register_handlers(self):
-        """Регистрация обработчиков команд"""
-        self.bot.message_handler(commands=['start'])(self.send_welcome)
-        self.bot.message_handler(commands=['help'])(self.send_help)
-        self.bot.message_handler(commands=['reset'])(self.reset_chat)
-        self.bot.message_handler(func=lambda message: True)(self.handle_message)
-    
-    def ask_openai(self, question: str) -> Optional[str]:
-        """
-        Отправка запроса к OpenAI API
+    try:
+        # ПРАВИЛЬНО: POST-запрос с JSON
+        response = requests.post(
+            OPENAI_API_URL,
+            headers=headers,
+            json=payload,  # автоматически сериализует в JSON
+            timeout=30
+        )
         
-        Args:
-            question: Текст вопроса пользователя
-            
-        Returns:
-            Ответ от API или сообщение об ошибке
-        """
-        headers = {
-            "Authorization": f"Bearer {config.OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "model": config.MODEL,
-            "messages": [
-                {
-                    "role": "system", 
-                    "content": "Ты полезный ассистент. Отвечай на русском языке, подробно и по делу."
-                },
-                {"role": "user", "content": question}
-            ],
-            "temperature": 0.7,
-            "max_tokens": 1000
-        }
-        
-        try:
-            response = requests.post(
-                config.OPENAI_API_URL,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                answer = result["choices"][0]["message"]["content"]
-                logger.info(f"Успешный ответ от API (длина: {len(answer)} символов)")
-                return answer
-            else:
-                error_msg = f"API Error {response.status_code}: {response.text}"
-                logger.error(error_msg)
-                return f"❌ Ошибка API: {response.status_code}\nПроверьте API ключ и баланс"
-                
-        except requests.exceptions.Timeout:
-            logger.error("Timeout при запросе к API")
-            return "❌ Превышено время ожидания ответа от сервера"
-        except requests.exceptions.ConnectionError:
-            logger.error("Connection error при запросе к API")
-            return "❌ Не удалось подключиться к API. Проверьте интернет"
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            return f"❌ Неожиданная ошибка: {str(e)}"
-    
-    def send_welcome(self, message):
-        """Обработчик команды /start"""
-        welcome_text = """
-🤖 **Привет! Я бот с искусственным интеллектом**
-
-Я использую нейросеть OpenAI, чтобы отвечать на ваши вопросы.
-
-**Что я умею:**
-• Отвечать на любые вопросы
-• Помогать с кодом
-• Объяснять сложные темы
-• Переводить текст
-
-**Команды:**
-/start - Показать это сообщение
-/help - Подробная справка
-/reset - Очистить диалог
-
-Просто напишите мне любой вопрос!
-"""
-        self.bot.reply_to(message, welcome_text, parse_mode='Markdown')
-    
-    def send_help(self, message):
-        """Обработчик команды /help"""
-        help_text = """
-📚 **Справка по использованию**
-
-**Как задавать вопросы:**
-• Пишите на любом языке (лучше на русском)
-• Чем точнее вопрос, тем точнее ответ
-• Можно задавать уточняющие вопросы
-
-**Примеры вопросов:**
-• "Какой класс у Buick Invicta 2024 года?"
-• "Напиши код калькулятора на Python"
-• "Объясни теорему Пифагора"
-• "Переведи на английский: привет мир"
-
-**Ограничения:**
-• Максимальная длина ответа - 1000 токенов (~750 слов)
-• Если ответ слишком длинный, он разобьется на части
-
-**Техническая информация:**
-• Модель: {model}
-• API: OpenAI
-• Бот написан на Python
-
-По всем вопросам: @ваш_телеграм
-""".format(model=config.MODEL)
-        self.bot.reply_to(message, help_text, parse_mode='Markdown')
-    
-    def reset_chat(self, message):
-        """Обработчик команды /reset"""
-        self.bot.reply_to(message, "🔄 Контекст диалога очищен! Задавайте новый вопрос.")
-    
-    def handle_message(self, message):
-        """Обработка всех текстовых сообщений"""
-        user_question = message.text
-        
-        # Пропускаем команды
-        if user_question.startswith('/'):
-            return
-        
-        # Индикатор печати
-        self.bot.send_chat_action(message.chat.id, 'typing')
-        
-        # Получаем ответ
-        answer = self.ask_openai(user_question)
-        
-        # Отправляем ответ (с разбивкой если нужно)
-        if answer and len(answer) > 4096:
-            for i in range(0, len(answer), 4096):
-                self.bot.reply_to(message, answer[i:i+4096])
+        # Проверяем статус
+        if response.status_code == 200:
+            result = response.json()
+            answer = result["choices"][0]["message"]["content"]
+            return answer
         else:
-            self.bot.reply_to(message, answer)
+            logger.error(f"API error {response.status_code}: {response.text}")
+            return f"Ошибка API: {response.status_code}\n{response.text}"
+            
+    except requests.exceptions.Timeout:
+        return "Ошибка: превышено время ожидания ответа от API"
+    except requests.exceptions.ConnectionError:
+        return "Ошибка: не удалось подключиться к API"
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return f"Неожиданная ошибка: {str(e)}"
+
+# ========== ОБРАБОТЧИКИ КОМАНД ==========
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    """Приветственное сообщение при /start"""
+    bot.reply_to(
+        message,
+        "👋 Привет! Я бот на основе OpenAI.\n\n"
+        "Просто напиши мне любой вопрос, и я постараюсь ответить.\n\n"
+        "Доступные команды:\n"
+        "/start - показать это сообщение\n"
+        "/help - справка\n"
+        "/reset - очистить историю диалога"
+    )
+
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    """Справка"""
+    bot.reply_to(
+        message,
+        "📚 **Справка**\n\n"
+        "• Задавайте любые вопросы текстом\n"
+        "• Бот отвечает на русском языке\n"
+        "• Используется модель " + MODEL + "\n\n"
+        "Примеры вопросов:\n"
+        "- Какой класс у Buick Invicta 2024?\n"
+        "- Что такое ассемблер?\n"
+        "- 2 + 2 * 2 = ?"
+    )
+
+@bot.message_handler(commands=['reset'])
+def reset_chat(message):
+    """Сброс контекста (простой вариант - просто приветствие)"""
+    bot.reply_to(message, "🔄 Контекст диалога очищен! Задавайте новый вопрос.")
+
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    """
+    Обработка всех текстовых сообщений.
+    Отправляет вопрос в OpenAI и возвращает ответ.
+    """
+    user_question = message.text
     
-    def run(self):
-        """Запуск бота"""
-        logger.info("Запуск бота...")
-        print(f"\n{'='*50}")
-        print(f"🤖 Бот запущен!")
-        print(f"📱 Telegram: @{self.bot.get_me().username}")
-        print(f"🧠 Модель: {config.MODEL}")
-        print(f"🔗 API URL: {config.OPENAI_API_URL}")
-        print(f"{'='*50}\n")
-        
-        try:
-            self.bot.infinity_polling(timeout=60)
-        except KeyboardInterrupt:
-            print("\n👋 Бот остановлен пользователем")
-            logger.info("Бот остановлен")
-        except Exception as e:
-            logger.error(f"Критическая ошибка: {e}")
-            sys.exit(1)
+    # Отправляем "печатает..." для индикации
+    bot.send_chat_action(message.chat.id, 'typing')
+    
+    # Получаем ответ от OpenAI
+    answer = ask_openai(user_question)
+    
+    # Отправляем ответ пользователю
+    if answer and len(answer) > 4096:
+        # Если ответ слишком длинный, разбиваем на части
+        for i in range(0, len(answer), 4096):
+            bot.reply_to(message, answer[i:i+4096])
+    else:
+        bot.reply_to(message, answer)
 
-
+# ========== ЗАПУСК БОТА ==========
 if __name__ == "__main__":
-    bot = OpenAIBot()
-    bot.run()
+    print("🤖 Бот запущен...")
+    print(f"Используется модель: {MODEL}")
+    print(f"API URL: {OPENAI_API_URL}")
+    print("Нажмите Ctrl+C для остановки")
+    
+    try:
+        bot.infinity_polling(timeout=60)
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
+    except Exception as e:
+        logger.error(f"Fatal error: {e}")
