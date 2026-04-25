@@ -9,28 +9,31 @@ from datetime import datetime
 import random
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
+# ===== ТОКЕНЫ =====
 TELEGRAM_TOKEN = "8627616199:AAGPsQ0XvQQFT0CpdWFoLNVnOcWJ254h_jA"
 GEMINI_API_KEY = "AIzaSyA9p8L5nA_P3il7tiAupDHkNez0WEDKXfs"
 
-# Настройка Gemini
+# ===== НАСТРОЙКА GEMINI =====
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 vision_model = genai.GenerativeModel('gemini-2.5-flash')
 
+# ===== ИНИЦИАЛИЗАЦИЯ БОТА =====
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 chats = {}
-
-# Хранилище настроек пользователей
 user_settings = {}
 
 # ===== ГЛАВНОЕ МЕНЮ С КНОПКАМИ =====
 def main_menu():
     keyboard = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     buttons = [
-        KeyboardButton("/help"),
-        KeyboardButton("/currency"),
-        KeyboardButton("/news"),
-        KeyboardButton("/start")
+        KeyboardButton("ℹ️ Помощь"),
+        KeyboardButton("🔄 Новый диалог"),
+        KeyboardButton("⭐ О боте"),
+        KeyboardButton("💵 Курс валют"),
+        KeyboardButton("📰 Новости"),
+        KeyboardButton("🌤 Погода"),
+        KeyboardButton("📖 Wikipedia")
     ]
     keyboard.add(*buttons)
     return keyboard
@@ -49,7 +52,7 @@ def get_weather(city):
     except Exception as e:
         return f"❌ Ошибка погоды: {e}"
 
-# ===== ФУНКЦИЯ КУРСОВ ВАЛЮТ (BYN) =====
+# ===== ФУНКЦИЯ КУРСОВ ВАЛЮТ =====
 def get_exchange_rates():
     try:
         url = "https://api.exchangerate-api.com/v4/latest/USD"
@@ -61,43 +64,36 @@ def get_exchange_rates():
         usd_rub = data['rates'].get('RUB', 'Нет данных')
         
         text = f"""
-💵 **Курсы валют (USD → BYN):** {usd_byn:.2f} Br
-💶 **Курсы валют (EUR → BYN):** {eur_byn:.2f} Br
+💵 **USD → BYN:** {usd_byn:.2f} Br
+💶 **EUR → BYN:** {eur_byn:.2f} Br
 
-📋 **Для справки:**
+📋 Для справки:
 💵 USD → RUB: {usd_rub:.2f} ₽
 
-📅 Обновлено: {datetime.now().strftime('%d.%m.%Y %H:%M')}
+📅 {datetime.now().strftime('%d.%m.%Y %H:%M')}
         """
         return text
     except Exception as e:
-        return f"❌ Ошибка получения курсов: {e}"
+        return f"❌ Ошибка: {e}"
 
 # ===== ФУНКЦИЯ НОВОСТЕЙ =====
 def get_news():
-    try:
-        news_sites = [
-            {"name": "РИА Новости", "url": "https://ria.ru/lenta/"},
-            {"name": "ТАСС", "url": "https://tass.ru/"},
-            {"name": "Ведомости", "url": "https://www.vedomosti.ru/"}
-        ]
-        
-        text = "📰 **Последние новости:**\n\n"
-        for site in news_sites:
-            text += f"• [{site['name']}]({site['url']})\n"
-        
-        text += "\n🔍 Напиши /news [тема] для поиска новостей по теме"
-        return text
-    except Exception as e:
-        return f"❌ Ошибка получения новостей: {e}"
+    news_sites = [
+        "РИА Новости - https://ria.ru/lenta/",
+        "ТАСС - https://tass.ru/",
+        "Ведомости - https://www.vedomosti.ru/"
+    ]
+    text = "📰 **Новости:**\n\n" + "\n".join(news_sites)
+    text += "\n\n🔍 /news [тема] - поиск новостей"
+    return text
 
 def search_news(topic):
     try:
-        prompt = f"Дай 3 свежих новости на тему '{topic}'. Напиши кратко, с источниками."
+        prompt = f"Дай 3 свежих новости на тему '{topic}'"
         response = model.generate_content(prompt)
         return f"📰 **Новости по теме '{topic}':**\n\n{response.text}"
-    except Exception as e:
-        return f"❌ Ошибка: {e}"
+    except:
+        return "❌ Ошибка поиска новостей"
 
 # ===== ФУНКЦИЯ WIKIPEDIA =====
 def search_wikipedia(query):
@@ -108,27 +104,12 @@ def search_wikipedia(query):
         if response.status_code == 200:
             data = response.json()
             title = data.get('title', query)
-            extract = data.get('extract', 'Нет описания')
-            page_url = data.get('content_urls', {}).get('desktop', {}).get('page', '')
-            
-            text = f"📖 **{title}**\n\n{extract[:500]}"
-            if page_url:
-                text += f"\n\n🔗 [Читать полностью]({page_url})"
-            return text
+            extract = data.get('extract', 'Нет описания')[:500]
+            return f"📖 **{title}**\n\n{extract}"
         else:
-            prompt = f"Расскажи кратко о '{query}' как в Wikipedia"
-            response = model.generate_content(prompt)
-            return f"📖 **{query}**\n\n{response.text[:500]}..."
+            return f"❌ Не найдено: {query}"
     except Exception as e:
-        return f"❌ Ошибка Wikipedia: {e}"
-
-# ===== ВЫБОР ЯЗЫКА =====
-def set_language(user_id, lang):
-    user_settings[user_id] = {'language': lang}
-    return f"🌐 Язык изменен на {lang}"
-
-def get_language(user_id):
-    return user_settings.get(user_id, {}).get('language', 'ru')
+        return f"❌ Ошибка: {e}"
 
 # ===== ОБРАБОТКА ФОТО =====
 @bot.message_handler(content_types=['photo'])
@@ -143,21 +124,15 @@ def handle_photo(message):
         response = requests.get(file_url)
         image_bytes = response.content
         
-        prompt = "Извлеки весь текст с этого изображения. Если текста нет, напиши 'Текст не найден'"
-        
-        file_type = mimetypes.guess_type(file_url)[0] or 'image/jpeg'
+        prompt = "Извлеки текст с этого изображения"
+        file_type = 'image/jpeg'
         
         response_vision = vision_model.generate_content([
             prompt,
-            {
-                "mime_type": file_type,
-                "data": base64.b64encode(image_bytes).decode('utf-8')
-            }
+            {"mime_type": file_type, "data": base64.b64encode(image_bytes).decode('utf-8')}
         ])
         
-        extracted_text = response_vision.text
-        bot.edit_message_text(f"✅ **Текст:**\n{extracted_text}", user_id, msg.message_id, parse_mode='Markdown')
-        
+        bot.edit_message_text(f"✅ **Текст:**\n{response_vision.text}", user_id, msg.message_id, parse_mode='Markdown')
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {str(e)[:200]}", user_id, msg.message_id)
 
@@ -168,79 +143,46 @@ def start(message):
     chats[user_id] = model.start_chat(history=[])
     user_settings[user_id] = {'language': 'ru'}
     
-    help_text = """
-🌟 **Добро пожаловать в Gemini Бот!** 🌟
+    text = """
+🌟 **Gemini Бот** 🌟
 
-📷 **Распознавание текста с фото**
-   - Отправь любое фото с текстом
+📷 Отправь фото - распознаю текст
+💬 Напиши вопрос - отвечу
 
-🌤 **Погода:** /weather [город]
-   Пример: /weather Минск
-
-💵 **Курсы валют:** /currency
-
-📰 **Новости:** /news или /news [тема]
-
-📖 **Wikipedia:** /wiki [запрос]
-
-🌐 **Сменить язык:** /language [ru/en]
-
-💬 **Просто напиши вопрос** - отвечу!
-
-📌 Используй кнопки внизу для быстрого доступа!
+📌 Используй кнопки внизу!
     """
-    bot.send_message(user_id, help_text, parse_mode='Markdown', reply_markup=main_menu())
+    bot.send_message(user_id, text, parse_mode='Markdown', reply_markup=main_menu())
 
-# ===== ОБРАБОТЧИК HELP =====
 @bot.message_handler(commands=['help'])
 def help_command(message):
-    user_id = message.chat.id
-    
-    help_text = """
-🌟 **Доступные команды:** 🌟
+    text = """
+🌟 **Команды:**
 
-📷 **Распознавание текста**
-   • Отправь фото с текстом
+/start - Главное меню
+/help - Помощь
+/weather [город] - Погода
+/currency - Курсы валют
+/news [тема] - Новости
+/wiki [запрос] - Wikipedia
 
-🌤 **Погода**
-   • /weather Минск - погода в городе
-
-💵 **Курсы валют**
-   • /currency - USD/BYN, EUR/BYN
-
-📰 **Новости**
-   • /news - главные новости
-   • /news технологии - новости по теме
-
-📖 **Wikipedia**
-   • /wiki Минск - информация из Википедии
-
-🌐 **Язык ответов**
-   • /language ru - русский
-   • /language en - английский
-
-💬 **Просто напиши вопрос** - отвечу!
-
-📌 Кнопки внизу отправляют команды автоматически!
+📌 Кнопки внизу работают без интернета!
     """
-    bot.send_message(user_id, help_text, parse_mode='Markdown', reply_markup=main_menu())
+    bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=main_menu())
 
 @bot.message_handler(commands=['weather'])
 def weather_command(message):
     city = message.text.replace('/weather', '').strip()
     if not city:
-        bot.reply_to(message, "🌤 Укажи город!\nПример: `/weather Минск`", parse_mode='Markdown')
+        bot.reply_to(message, "🌤 Пример: `/weather Минск`", parse_mode='Markdown')
         return
     
     bot.send_chat_action(message.chat.id, 'typing')
-    weather_info = get_weather(city)
-    bot.reply_to(message, weather_info, parse_mode='Markdown')
+    bot.reply_to(message, get_weather(city), parse_mode='Markdown')
 
 @bot.message_handler(commands=['currency'])
 def currency_command(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    rates = get_exchange_rates()
-    bot.reply_to(message, rates, parse_mode='Markdown')
+    bot.reply_to(message, get_exchange_rates(), parse_mode='Markdown')
 
 @bot.message_handler(commands=['news'])
 def news_command(message):
@@ -248,66 +190,90 @@ def news_command(message):
     
     if topic:
         bot.send_chat_action(message.chat.id, 'typing')
-        news_info = search_news(topic)
+        bot.reply_to(message, search_news(topic), parse_mode='Markdown')
     else:
-        bot.send_chat_action(message.chat.id, 'typing')
-        news_info = get_news()
-    
-    bot.reply_to(message, news_info, parse_mode='Markdown', disable_web_page_preview=True)
+        bot.reply_to(message, get_news(), parse_mode='Markdown', disable_web_page_preview=True)
 
 @bot.message_handler(commands=['wiki'])
 def wiki_command(message):
     query = message.text.replace('/wiki', '').strip()
     if not query:
-        bot.reply_to(message, "📖 Укажи запрос!\nПример: `/wiki Минск`", parse_mode='Markdown')
+        bot.reply_to(message, "📖 Пример: `/wiki Минск`", parse_mode='Markdown')
         return
     
     bot.send_chat_action(message.chat.id, 'typing')
-    wiki_info = search_wikipedia(query)
-    bot.reply_to(message, wiki_info, parse_mode='Markdown', disable_web_page_preview=True)
+    bot.reply_to(message, search_wikipedia(query), parse_mode='Markdown')
 
-@bot.message_handler(commands=['language'])
-def language_command(message):
+# ===== ОБРАБОТЧИКИ КНОПОК (БЕЗ GEMINI) =====
+@bot.message_handler(func=lambda message: message.text == "ℹ️ Помощь")
+def help_button(message):
+    help_command(message)
+
+@bot.message_handler(func=lambda message: message.text == "🔄 Новый диалог")
+def new_dialog_button(message):
     user_id = message.chat.id
-    lang = message.text.replace('/language', '').strip().lower()
-    
-    if lang not in ['ru', 'en']:
-        bot.reply_to(message, "🌐 Доступные языки: `ru` или `en`\nПример: `/language en`", parse_mode='Markdown')
-        return
-    
-    result = set_language(user_id, lang)
-    bot.reply_to(message, result, parse_mode='Markdown')
+    chats[user_id] = model.start_chat(history=[])
+    bot.send_message(user_id, "✅ Новый диалог начат!", reply_markup=main_menu())
 
-# ===== ОСНОВНОЙ ОБРАБОТЧИК =====
+@bot.message_handler(func=lambda message: message.text == "⭐ О боте")
+def about_button(message):
+    text = """
+🤖 **О боте**
+
+🧠 Модель: Gemini 2.5 Flash
+💬 Поддержка контекста
+📷 Распознавание текста с фото
+🌤 Погода, курс валют, новости, Wikipedia
+
+Создан на Python + Telebot
+    """
+    bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=main_menu())
+
+@bot.message_handler(func=lambda message: message.text == "💵 Курс валют")
+def currency_button(message):
+    currency_command(message)
+
+@bot.message_handler(func=lambda message: message.text == "📰 Новости")
+def news_button(message):
+    news_command(message)
+
+@bot.message_handler(func=lambda message: message.text == "🌤 Погода")
+def weather_button(message):
+    bot.send_message(message.chat.id, "🌤 Введите город после команды:\n`/weather Минск`", parse_mode='Markdown')
+
+@bot.message_handler(func=lambda message: message.text == "📖 Wikipedia")
+def wiki_button(message):
+    bot.send_message(message.chat.id, "📖 Введите запрос после команды:\n`/wiki Минск`", parse_mode='Markdown')
+
+# ===== ОСНОВНОЙ ОБРАБОТЧИК (ТОЛЬКО ДЛЯ ТЕКСТА) =====
 @bot.message_handler(func=lambda message: True)
 def chat(message):
     user_id = message.chat.id
     user_text = message.text
     
+    # Пропускаем текст кнопок, которые уже обработаны
+    if user_text in ["ℹ️ Помощь", "🔄 Новый диалог", "⭐ О боте", "💵 Курс валют", "📰 Новости", "🌤 Погода", "📖 Wikipedia"]:
+        return
+    
     if user_id not in chats:
         chats[user_id] = model.start_chat(history=[])
-    
-    # Добавляем информацию о языке в промпт
-    lang = get_language(user_id)
-    if lang == 'en':
-        user_text = f"[Answer in English] {user_text}"
     
     try:
         bot.send_chat_action(user_id, 'typing')
         response = chats[user_id].send_message(user_text)
-        bot.send_message(user_id, response.text[:4096])
+        bot.send_message(user_id, response.text[:4096], reply_markup=main_menu())
     except Exception as e:
-        bot.send_message(user_id, f"❌ Ошибка: {str(e)[:150]}")
+        if "429" in str(e):
+            bot.send_message(user_id, "⚠️ Лимит запросов. Попробуйте позже или используйте кнопки меню.", reply_markup=main_menu())
+        else:
+            bot.send_message(user_id, f"❌ Ошибка: {str(e)[:150]}", reply_markup=main_menu())
 
 # ===== ЗАПУСК =====
 if __name__ == '__main__':
     print("=" * 50)
     print("🚀 БОТ ЗАПУЩЕН!")
     print("=" * 50)
-    print("✅ Кнопки отправляют команды:")
-    print("   /help     - Помощь")
-    print("   /currency - Курсы валют")
-    print("   /news     - Новости")
-    print("   /start    - Главное меню")
+    print("✅ Кнопки работают без Gemini")
+    print("✅ При ошибке 429 кнопки продолжают работать")
     print("=" * 50)
     bot.polling(none_stop=True)
